@@ -1,6 +1,6 @@
 """
-main.py - Điều phối toàn bộ quy trình tạo video Reddit Shorts tiếng Việt
-Luồng: Cào Reddit -> Chọn bài -> Dịch AI -> Tạo giọng đọc -> Render video
+main.py - Điều phối quy trình tạo video Fake Chat (Zalo/iMessage) tiếng Việt từ Reddit
+Luồng: Cào Reddit -> AI tạo Chat -> Render giao diện Chat -> TTS 2 giọng -> Video Overlay
 """
 
 import os
@@ -18,18 +18,18 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from config import GEMINI_API_KEY, OUTPUT_DIR
-from reddit_scraper import fetch_all_trending_posts, display_posts_menu
+from reddit_scraper import fetch_with_requests
 from translator import setup_gemini, translate_and_dramatize, preview_script
-from tts_generator import generate_speech
+from tts_generator import generate_chat_audio
 from video_compiler import compile_video
-from reddit_screenshot import generate_reddit_screenshot
+from chat_generator import generate_chat_states
 
 
 BANNER = """
 +--------------------------------------------------------------+
 |                                                              |
-|   Reddit Vietnam Shorts Generator                            |
-|   Tu dong: Cao Reddit -> Dich AI -> Giong doc -> Video       |
+|   Fake Chat Shorts Generator                                 |
+|   Tu dong: Reddit -> AI Chat -> TTS -> Render Video          |
 |                                                              |
 +--------------------------------------------------------------+
 """
@@ -83,26 +83,26 @@ def save_metadata(post: dict, translated: dict, video_path: str, output_dir: str
     metadata = {
         "created_at": datetime.now().isoformat(),
         "source_post": {
-            "subreddit": post["subreddit"],
-            "title_en": post["title"],
-            "url": post["url"],
-            "score": post["score"],
+            "platform": "Reddit",
+            "title": post.get("title"),
+            "url": post.get("url"),
+            "score": post.get("score"),
         },
         "video": {
             "title_vi": translated["title_vi"],
             "hashtags": translated["hashtags"],
-            "script": translated["script"],
+            "messages": translated["messages"],
             "word_count": translated["word_count"],
             "output_file": video_path,
         },
         "youtube_upload_info": {
             "recommended_title": translated["title_vi"],
             "recommended_description": (
-                f"{translated['script'][:300]}...\n\n"
+                f"Bóc phốt cực căng 😱\n\n"
                 f"{'  '.join(['#' + h for h in translated['hashtags']])}\n\n"
-                f"#RedditVN #RedditViệtNam #Shorts"
+                f"#Drama #LuatNhanGua #NgoaiTinh #Shorts"
             ),
-            "recommended_tags": translated["hashtags"] + ["Reddit", "RedditVN", "Shorts", "GiậtGân"],
+            "recommended_tags": translated.get("hashtags", []) if isinstance(translated.get("hashtags"), list) else [translated.get("hashtags", "")] + ["Drama", "Zalo", "FakeChat", "Shorts"],
         }
     }
 
@@ -123,10 +123,16 @@ def print_upload_guide(translated: dict, video_path: str):
     print(f"\n📹 File video: {video_path}")
     print(f"\n🏷️  Tiêu đề YouTube/TikTok:")
     print(f"   {translated['title_vi']}")
+    hashtags = translated.get('hashtags', '')
+    if isinstance(hashtags, list):
+        hashtag_str = " ".join(["#" + h.replace('#', '') for h in hashtags])
+    else:
+        hashtag_str = hashtags
+    
     print(f"\n#️⃣  Hashtags:")
-    print(f"   {hashtag_str} #RedditVN #Shorts")
+    print(f"   {hashtag_str} #ThreadsVN #Shorts")
     print(f"\n📋 Copy mô tả này vào YouTube:")
-    print(f"   {translated['script'][:200]}...")
+    print(f"   Bóc phốt cực căng 😱 Hãy xem đến cuối...")
     print(f"\n{'='*70}")
     print("  ✅ Tips để video viral:")
     print("  • Đăng vào khung giờ vàng: 7h-9h sáng, 12h trưa, 8h-11h tối")
@@ -148,20 +154,26 @@ def run():
     os.makedirs("assets/fonts", exist_ok=True)
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # ─── Bước 1: Cào bài đăng Reddit ─────────────────────────────
+    # ─── Bước 1: Lấy bài đăng Reddit ─────────────────────────────
     print("📡 BƯỚC 1/4: Tải bài đăng từ Reddit\n")
-    posts = fetch_all_trending_posts(verbose=True)
+    sub = input("🔗 Nhập subreddit (VD: confessions, TrueOffMyChest): ").strip()
+    if not sub:
+        sub = "confessions"
+        
+    print(f"  Đang cào bài hot từ r/{sub}...")
+    posts = fetch_with_requests(sub, limit=3)
 
     if not posts:
-        print("❌ Không tải được bài đăng. Kiểm tra kết nối mạng và thử lại.")
-        sys.exit(1)
+        print("❌ Không tải được nội dung từ Reddit. Sử dụng kịch bản mẫu để demo.")
+        posts = [{
+            "title": "Mẹ chồng vứt bỏ bộ sưu tập truyện tranh 100 triệu của tôi",
+            "url": "https://reddit.com/r/demo",
+            "score": 55000,
+            "text": "Tôi có một bộ sưu tập truyện tranh hiếm trị giá khoảng 100 triệu, được cất cẩn thận trong tủ kính. Hôm qua đi làm về, tôi thấy mẹ chồng đang đem cho thằng cháu họ xa mấy cuốn truyện của tôi. Bà bảo 'mấy quyển truyện tranh trẻ con này có gì mà quý'. Tôi đã cãi nhau to với bà và yêu cầu bà phải đền tiền. Bây giờ cả nhà chồng đang chửi tôi hỗn láo. Tôi có sai không?"
+        }]
 
-    # ─── Bước 2: Người dùng chọn bài ─────────────────────────────
-    print(f"\n🎯 BƯỚC 2/4: Chọn bài đăng\n")
-    selected_post = display_posts_menu(posts)
-
-    if not selected_post:
-        sys.exit(0)
+    selected_post = posts[0] # Lấy bài top 1
+    print(f"\n✅ Đã lấy dữ liệu: {selected_post['title']}")
 
     # ─── Bước 3: Dịch và viết lại kịch bản ──────────────────────
     print(f"\n🤖 BƯỚC 3/4: Dịch và viết lại kịch bản tiếng Việt\n")
@@ -181,31 +193,29 @@ def run():
     video_session_dir = os.path.join(OUTPUT_DIR, f"{timestamp}_{safe_title[:40]}")
     os.makedirs(video_session_dir, exist_ok=True)
 
-    # ─── Bước 4a: Tạo giọng đọc ──────────────────────────────────
-    print(f"\n🎙️  BƯỚC 4/4: Tạo giọng đọc + Render video\n")
-    audio_path, timing_path, word_boundaries = generate_speech(
-        translated["script"],
-        output_dir=video_session_dir,
-    )
+    # ─── Bước 4a: Tạo ảnh & giọng đọc ────────────────────────────
+    print(f"\n🎙️  BƯỚC 4/4: Tạo UI Chat & Giọng đọc + Render video\n")
+    
+    # Tạo ảnh Chat
+    chat_states = generate_chat_states(translated["messages"], video_session_dir)
+    
+    # Tạo audio cho từng tin nhắn
+    audio_items = generate_chat_audio(translated["messages"], video_session_dir)
 
-    if not word_boundaries:
-        print("❌ Không tạo được dữ liệu timing. Kiểm tra edge-tts và thử lại.")
+    if not audio_items or not chat_states:
+        print("❌ Không tạo được Audio/Image. Thử lại.")
         sys.exit(1)
 
     # ─── Bước 4b: Ghép video ──────────────────────────────────────
     has_backgrounds = check_backgrounds_dir()
 
     if has_backgrounds:
-        # Sinh ảnh screenshot Reddit
-        screenshot_path = generate_reddit_screenshot(selected_post, video_session_dir)
-
         video_path = compile_video(
-            audio_path=audio_path,
-            word_boundaries=word_boundaries,
+            audio_items=audio_items,
+            chat_states=chat_states,
             translated=translated,
             output_dir=video_session_dir,
             video_title=safe_title[:60],
-            screenshot_path=screenshot_path,
         )
 
         # Lưu metadata
@@ -216,16 +226,15 @@ def run():
 
     else:
         # Không có video nền -> chỉ lưu audio và kịch bản
-        print(f"\n  📁 Đã tạo:")
-        print(f"     🎵 Audio: {audio_path}")
-        print(f"     📝 Kịch bản + hashtags lưu tại: {video_session_dir}/")
+        print(f"\n  📁 Đã tạo audio và ảnh chat tại: {video_session_dir}/")
 
         # Lưu kịch bản ra file text
         script_path = os.path.join(video_session_dir, "script.txt")
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(f"TIÊU ĐỀ: {translated['title_vi']}\n\n")
-            f.write(f"HASHTAGS: {' '.join(['#' + h for h in translated['hashtags']])}\n\n")
-            f.write(f"KỊCH BẢN:\n{translated['script']}")
+            f.write(f"KỊCH BẢN CHAT:\n")
+            for msg in translated["messages"]:
+                f.write(f"[{msg['sender']} - {msg['voice']}]: {msg['text']}\n")
         print(f"     📄 Kịch bản: {script_path}")
 
     print("\n✅ Hoàn thành! Chúc bạn kiếm được nhiều view! 🚀\n")

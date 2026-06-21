@@ -8,10 +8,12 @@ import asyncio
 import json
 import os
 import edge_tts
-from config import TTS_VOICE, TTS_RATE
+from config import TTS_RATE
 
+VOICE_MALE = "vi-VN-NamMinhNeural"
+VOICE_FEMALE = "vi-VN-HoaiMyNeural"
 
-async def _generate_speech_async(text: str, output_audio_path: str, output_timing_path: str):
+async def _generate_speech_async(text: str, voice: str, output_audio_path: str):
     """
     Hàm async tạo giọng đọc và lấy thời gian từng từ (Word Boundary).
 
@@ -22,73 +24,47 @@ async def _generate_speech_async(text: str, output_audio_path: str, output_timin
     """
     communicate = edge_tts.Communicate(
         text=text,
-        voice=TTS_VOICE,
+        voice=voice,
         rate=TTS_RATE,
     )
-
-    word_boundaries = []
-
-    with open(output_audio_path, "wb") as f:
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                f.write(chunk["data"])
-            elif chunk["type"] == "WordBoundary":
-                word_boundaries.append({
-                    "word": chunk["text"],
-                    "offset_ms": chunk["offset"] / 10000,
-                    "duration_ms": chunk["duration"] / 10000,
-                })
-            elif chunk["type"] == "SentenceBoundary":
-                # Fallback cho giọng tiếng Việt không hỗ trợ WordBoundary
-                words = chunk["text"].split()
-                if words:
-                    dur_per_word = chunk["duration"] / len(words)
-                    for i, w in enumerate(words):
-                        word_boundaries.append({
-                            "word": w,
-                            "offset_ms": (chunk["offset"] + i * dur_per_word) / 10000,
-                            "duration_ms": dur_per_word / 10000
-                        })
-
-    # Lưu timing data
-    with open(output_timing_path, "w", encoding="utf-8") as f:
-        json.dump(word_boundaries, f, ensure_ascii=False, indent=2)
-
-    return word_boundaries
+    await communicate.save(output_audio_path)
 
 
-def generate_speech(text: str, output_dir: str) -> tuple[str, str, list[dict]]:
+def generate_chat_audio(messages: list, output_dir: str) -> list[dict]:
     """
-    Tạo giọng đọc từ kịch bản văn bản.
+    Tạo các file audio riêng biệt cho từng tin nhắn với giọng Nam/Nữ tương ứng.
 
     Args:
-        text: Kịch bản tiếng Việt
+        messages: Mảng các tin nhắn
         output_dir: Thư mục lưu file
 
     Returns:
-        (audio_path, timing_path, word_boundaries)
+        Mảng thông tin audio: [{"index": 0, "audio_path": "...", "duration": 2.5}, ...]
     """
     os.makedirs(output_dir, exist_ok=True)
+    
+    print(f"  🎙️  Đang tạo giọng đọc cho {len(messages)} tin nhắn...", end=" ", flush=True)
+    
+    results = []
+    
+    for i, msg in enumerate(messages):
+        audio_path = os.path.join(output_dir, f"msg_{i:03d}.mp3")
+        voice = VOICE_FEMALE if msg.get("voice", "female") == "female" else VOICE_MALE
+        
+        asyncio.run(
+            _generate_speech_async(msg["text"], voice, audio_path)
+        )
+        
+        dur = get_audio_duration(audio_path)
+        
+        results.append({
+            "index": i,
+            "audio_path": audio_path,
+            "duration": dur
+        })
 
-    audio_path = os.path.join(output_dir, "voice.mp3")
-    timing_path = os.path.join(output_dir, "timing.json")
-
-    print(f"  🎙️  Đang tạo giọng đọc ({TTS_VOICE})...", end=" ", flush=True)
-
-    word_boundaries = asyncio.run(
-        _generate_speech_async(text, audio_path, timing_path)
-    )
-
-    # Tính tổng thời lượng audio
-    if word_boundaries:
-        last = word_boundaries[-1]
-        total_ms = last["offset_ms"] + last["duration_ms"]
-        total_sec = total_ms / 1000
-        print(f"✅ ({total_sec:.1f} giây, {len(word_boundaries)} từ)")
-    else:
-        print("✅")
-
-    return audio_path, timing_path, word_boundaries
+    print("✅")
+    return results
 
 
 def get_audio_duration(audio_path: str) -> float:

@@ -1,6 +1,6 @@
 """
-translator.py - Dịch và viết lại câu chuyện Reddit sang tiếng Việt giật gân
-Sử dụng OpenAI SDK (kết nối OpenRouter) để tạo kịch bản viral miễn phí.
+translator.py - Tóm tắt và viết lại drama từ Threads sang dạng kịch bản Tiktok giật gân.
+Sử dụng OpenAI SDK (kết nối OpenRouter) để tạo kịch bản viral.
 """
 
 import sys
@@ -37,43 +37,45 @@ def calculate_target_word_count() -> int:
 
 def translate_and_dramatize(post: dict, client) -> dict:
     """
-    Dịch và viết lại câu chuyện Reddit sang tiếng Việt dạng giật gân.
+    Chuyển thể câu chuyện Reddit tiếng Anh thành hội thoại tin nhắn giả lập (Fake Chat) tiếng Việt.
 
     Args:
         post: Dict chứa thông tin bài đăng Reddit
         client: OpenAI client kết nối qua OpenRouter
 
     Returns:
-        Dict chứa: title_vi, hashtags, script
+        Dict chứa: title_vi, hashtags, messages
     """
     target_words = calculate_target_word_count()
 
-    prompt = f"""Bạn là chuyên gia viết content viral cho TikTok và YouTube Shorts tại Việt Nam.
-Nhiệm vụ của bạn là đọc một câu chuyện từ Reddit (tiếng Anh) và viết lại thành kịch bản đọc cho video ngắn tiếng Việt, với phong cách gây sốc, kích thích tò mò, cảm xúc mạnh.
+    prompt = f"""Bạn là biên kịch chuyên nghiệp cho video TikTok "Fake Chat Story".
+Nhiệm vụ của bạn là đọc câu chuyện từ Reddit (tiếng Anh) và chuyển hóa nó thành một đoạn chat gay cấn giữa 2 nhân vật (Zalo hoặc Messenger) bằng tiếng Việt Gen Z.
 
---- THÔNG TIN BÀI ĐĂNG ---
-Subreddit: r/{post['subreddit']}
-Tiêu đề gốc: {post['title']}
+--- THÔNG TIN BÀI GỐC ---
+Subreddit: r/{post.get('subreddit', 'story')}
+Tiêu đề: {post.get('title', 'Câu chuyện giật gân')}
 
 Nội dung:
-{post['text'][:3000]}
---- KẾT THÚC BÀI ĐĂNG ---
+{post.get('text', '')[:3000]}
+--- KẾT THÚC BÀI GỐC ---
 
---- YÊU CẦU OUTPUT ---
-Hãy trả về một JSON HỢP LỆ chính xác theo định dạng sau (không giải thích thêm):
+--- YÊU CẦU CHO KỊCH BẢN CHAT ---
+1. TỔNG SỐ TỪ CỦA CÁC TIN NHẮN PHẢI CHÍNH XÁC KHOẢNG {target_words} TỪ (đọc trong khoảng {TARGET_VIDEO_DURATION_SECONDS} giây).
+2. HAI NHÂN VẬT: Hãy tự đặt tên cho 2 người (ví dụ: Chồng/Vợ, Mẹ chồng/Nàng dâu, Sếp/Nhân viên, Trà xanh/Chính thất). Một người là Nam, một người là Nữ để phân biệt giọng đọc.
+3. KỊCH TÍNH NGAY LẬP TỨC: Tin nhắn đầu tiên phải đánh thẳng vào trọng tâm cực gắt (VD: "Anh gửi lộn ảnh cô ta cho em rồi kìa", "Tại sao mẹ lại vứt đồ của con?"). KHÔNG cần chào hỏi rườm rà.
+4. NGÔN TỪ: Văn phong chat Zalo/Messenger của người Việt, có dùng từ lóng, viết tắt nhẹ, phẫn nộ, cảm xúc.
 
+ĐỊNH DẠNG ĐẦU RA (Output Format):
+Bạn CHỈ ĐƯỢC PHÉP trả về dữ liệu định dạng JSON hợp lệ, với cấu trúc sau:
 {{
-  "title_vi": "Tiêu đề tiếng Việt giật gân, gây tò mò tối đa (dưới 100 ký tự, dùng cho YouTube/TikTok)",
-  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"],
-  "script": "Toàn bộ kịch bản đọc tiếng Việt. Bắt đầu bằng một câu hook cực kỳ giật gân. Kể câu chuyện sinh động, dùng ngôn ngữ giới trẻ VN. Kết thúc bằng câu kêu gọi bình luận. Khoảng {target_words} từ."
-}}
-
---- HƯỚNG DẪN VIẾT KỊCH BẢN ---
-1. Câu Hook (3-5 giây đầu): Phải cực kỳ giật gân, đặt câu hỏi hoặc nêu tình huống sốc.
-2. Phần thân: Kể câu chuyện nhanh, kịch tính, không lan man. Dùng "tôi", "anh ấy/cô ấy".
-3. Câu kết: Kêu gọi tương tác: "Bạn nghĩ tôi đúng hay sai? Comment bên dưới nhé!"
-4. Ngôn ngữ: Tự nhiên, gần gũi với giới trẻ VN (18-30 tuổi).
-5. Không bịa: Chỉ được dịch và phóng tác, không thêm tình tiết không có trong bài gốc."""
+    "title_vi": "Tiêu đề tiếng Việt ngắn gọn, giật tít, tối đa 12 chữ",
+    "hashtags": "#drama #phốt #xuhuong #redditvn",
+    "messages": [
+        {{"sender": "Tên Người 1", "voice": "female", "text": "Tin nhắn 1"}},
+        {{"sender": "Tên Người 2", "voice": "male", "text": "Tin nhắn 2"}},
+        ...
+    ]
+}}"""
 
     print("  Dang goi AI (qua OpenRouter)...", end=" ", flush=True)
 
@@ -89,17 +91,29 @@ Hãy trả về một JSON HỢP LỆ chính xác theo định dạng sau (khôn
         )
         
         raw_text = response.choices[0].message.content.strip()
+        
+        # Loại bỏ markdown ```json ... ``` nếu có
+        if raw_text.startswith("```json"):
+            raw_text = raw_text.replace("```json", "", 1)
+        if raw_text.startswith("```"):
+            raw_text = raw_text.replace("```", "", 1)
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        raw_text = raw_text.strip()
 
         # Parse JSON
         result = json.loads(raw_text)
 
-        required_fields = ["title_vi", "hashtags", "script"]
+        required_fields = ["title_vi", "hashtags", "messages"]
         for field in required_fields:
             if field not in result:
                 raise ValueError(f"Thieu truong '{field}' trong response")
 
-        result["script"] = result["script"].strip()
-        result["word_count"] = len(result["script"].split())
+        total_words = 0
+        for msg in result["messages"]:
+            total_words += len(msg["text"].split())
+
+        result["word_count"] = total_words
 
         print(f"OK ({result['word_count']} tu)")
         return result
@@ -115,9 +129,15 @@ def preview_script(translated: dict):
     print("  KICH BAN TIENG VIET")
     print(f"{'='*70}")
     print(f"\nTieu de: {translated['title_vi']}")
-    print(f"\nHashtags: {' '.join(['#' + h for h in translated['hashtags']])}")
-    print(f"\nKich ban ({translated['word_count']} tu):\n")
-    print(translated["script"])
+    hashtags = translated.get('hashtags', '')
+    if isinstance(hashtags, list):
+        hashtags_str = ' '.join(['#' + h.replace('#', '') for h in hashtags])
+    else:
+        hashtags_str = hashtags
+    print(f"\nHashtags: {hashtags_str}")
+    print(f"\nKich ban Chat ({translated['word_count']} tu):\n")
+    for msg in translated["messages"]:
+        print(f"[{msg['sender']} - {msg['voice']}]: {msg['text']}")
     print(f"\n{'='*70}\n")
 
 

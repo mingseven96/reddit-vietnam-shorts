@@ -66,6 +66,9 @@ TTS_RATE = "+15%"
 # Thư mục chứa video nền (đặt các file .mp4 vào đây)
 BACKGROUNDS_DIR = "assets/backgrounds"
 
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+
 # Thư mục chứa font chữ
 FONTS_DIR = "assets/fonts"
 
